@@ -71,8 +71,8 @@ ecdsa==0.16.1 \
     --hash=sha256:881fa5e12bb992972d3d1b3d4dfbe149ab76a89f13da02daa5ea1ec7dea6e747 \
     --hash=sha256:cfc046a2ddd425adbd1a78b3c46f0d1325c657811c0f45ecc3a0a6236c1e50ff
     # via electron-cash
-https://github.com/Electron-Cash/Electron-Cash/archive/de56e4e6f34b0866e6e0d0aebc9c547b791d9ed8.zip \
-    --hash=sha256:ac1f46564761f3ff183c68c190f3a72816f28afede18ce0adef596d8b65826c7
+https://github.com/MrNaif2018/electrum/archive/9f12419f98f41dca6016eaa919bdec706d18c469.zip \
+    --hash=sha256:ae2899a723a89fd101d77be0bef64404e27eef84c6aaeba4f9fae75f302a6944
     # via -r requirements/daemons/bch.txt
 idna==2.10 \
     --hash=sha256:b307872f855b18632ce0c21c5e45be78c0ea7ae4c15c828c20788b26921eb3f6 \
