@@ -1,3 +1,7 @@
+set no-exit-message := true
+
+test-args := env("TEST_ARGS", "")
+
 [private]
 default:
     @just --list --unsorted --justfile {{ justfile() }}
@@ -21,7 +25,7 @@ prod-api:
 
 # run migrations and start api service in production
 [group("Services")]
-prod-api-up: db_migrate prod-api
+prod-api-up: db-migrate prod-api
 
 # run coin daemons
 [group("Services")]
@@ -35,42 +39,46 @@ lint:
 
 # run linters (check only)
 [group("Linting")]
-lint_check:
+lint-check:
     ruff format --check . && ruff check .
 
 # run type checking
 [group("Linting")]
-lint_types:
+lint-types:
     mypy api tests main.py worker.py
 
 # run tests
 [group("Testing")]
-test *TEST_ARGS:
-    pytest {{ TEST_ARGS }}
+test *args:
+    pytest {{ trim(test-args + " " + args) }}
 
 # run functional tests
 [group("Testing")]
-functional *TEST_ARGS:
-    BTC_LIGHTNING=true pytest tests/functional/ --cov-append -n 0 {{ TEST_ARGS }}
+functional *args:
+    BTC_LIGHTNING=true pytest tests/functional/ --cov-append -n 0 {{ trim(test-args + " " + args) }}
 
 # create new migration
 [group("Database")]
-db_migration MESSAGE:
+db-migration MESSAGE:
     alembic revision --autogenerate -m "{{ MESSAGE }}"
 
 # run alembic upgrade
 [group("Database")]
-db_migrate:
+db-migrate:
     alembic upgrade head
 
 # run alembic downgrade
 [group("Database")]
-db_rollback:
+db-rollback:
     alembic downgrade -1
+
+# run ci checks (without tests)
+[group("CI")]
+ci-lint: lint-check lint-types
 
 # run ci checks
 [group("CI")]
-ci: lint_check lint_types test
+ci *args: ci-lint (test args)
 
 # btc-setup tasks
 

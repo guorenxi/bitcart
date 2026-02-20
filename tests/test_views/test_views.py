@@ -129,7 +129,7 @@ async def test_users_me(client: TestClient, user: dict[str, Any], token: str) ->
     assert "created" in j
 
 
-async def test_wallets_balance(client: TestClient, token: str, wallet: dict[str, Any]) -> None:
+async def test_wallets_balance(client: TestClient, token: str, wallet: dict[str, Any], mock_btc_balance: Any) -> None:
     assert (await client.get("/wallets/balance")).status_code == 401
     resp = await client.get("/wallets/balance", headers={"Authorization": f"Bearer {token}"})
     assert resp.status_code == 200
@@ -187,7 +187,7 @@ async def check_ws_response_complete(ws: AsyncWebSocketSession, sent_amount: Dec
 
 async def check_ws_response2(ws: AsyncWebSocketSession) -> None:
     data = await ws.receive_json()
-    assert data == {"status": "success", "balance": "0.01"}
+    assert data == {"status": "success", "balance": "1.5"}
 
 
 @pytest.mark.parametrize(
@@ -433,13 +433,21 @@ async def test_management_commands(
         assert not os.path.exists(log_file)
 
 
+async def test_first_user_registration_bypasses_disable_registration(client: TestClient) -> None:
+    resp = await client.post("/users", json=static_data.POLICY_USER)
+    assert resp.status_code == 200
+    resp = await client.post("/users", json={**static_data.POLICY_USER, "email": "other@test.com"})
+    assert resp.status_code == 422
+    assert resp.json()["detail"] == "Registration disabled"
+
+
 async def test_policies(client: TestClient, token: str) -> None:
     resp = await client.get("/manage/policies")
     assert resp.status_code == 200
     assert resp.json() == {
         "allow_powered_by_bitcart": False,
         "allow_anonymous_configurator": True,
-        "disable_registration": False,
+        "disable_registration": True,  # set to True automatically after first user signed up
         "require_verified_email": False,
         "allow_file_uploads": True,
         "discourage_index": False,
@@ -778,7 +786,7 @@ async def test_batch_commands(client: TestClient, token: str, store: dict[str, A
     ] == "complete"
 
 
-async def test_wallet_ws(client: TestClient, token: str, app: FastAPI) -> None:
+async def test_wallet_ws(client: TestClient, token: str, app: FastAPI, mock_btc_balance: Any) -> None:
     redis_pool = await app.state.dishka_container.get(Redis)
     r = await client.post(
         "/wallets",
@@ -999,9 +1007,15 @@ async def test_create_invoice_and_pay(client: TestClient, token: str, store: dic
     await client.delete(f"/invoices/{invoice_id}", headers={"Authorization": f"Bearer {token}"})
 
 
-async def test_get_public_store(client: TestClient, store: dict[str, Any]) -> None:
+async def test_get_public_store(client: TestClient, store: dict[str, Any], token: str) -> None:
     store_id = store["id"]
-    user_id = (await client.post("/users", json={"email": "test2auth@example.com", "password": "test12345"})).json()["id"]
+    user_id = (
+        await client.post(
+            "/users",
+            json={"email": "test2auth@example.com", "password": "test12345"},
+            headers={"Authorization": f"Bearer {token}"},
+        )
+    ).json()["id"]
     new_token = (
         await client.post(
             "/token",
@@ -1112,12 +1126,12 @@ async def test_cryptos(client: TestClient, app: FastAPI) -> None:
     }
 
 
-async def test_wallet_balance(client: TestClient, token: str, wallet: dict[str, Any]) -> None:
+async def test_wallet_balance(client: TestClient, token: str, wallet: dict[str, Any], mock_btc_balance: Any) -> None:
     assert (await client.get(f"/wallets/{wallet['id']}/balance")).status_code == 401
     resp = await client.get(f"/wallets/{wallet['id']}/balance", headers={"Authorization": f"Bearer {token}"})
     assert resp.status_code == 200
     assert resp.json() == {
-        "confirmed": "0.01000000",
+        "confirmed": "1.50000000",
         "lightning": "0.00000000",
         "unconfirmed": "0.00000000",
         "unmatured": "0.00000000",
@@ -1360,7 +1374,7 @@ async def get_wallet_balances(client: TestClient, token: str) -> Decimal:
     return (await client.get("/wallets/balance", headers={"Authorization": f"Bearer {token}"})).json()
 
 
-async def test_users_display_balance(client: TestClient, token: str, wallet: dict[str, Any]) -> None:
+async def test_users_display_balance(client: TestClient, token: str, wallet: dict[str, Any], mock_btc_balance: Any) -> None:
     assert Decimal(await get_wallet_balances(client, token)) > 1
     assert (await client.post("/users/me/settings")).status_code == 401
     resp = await client.post(
@@ -1370,7 +1384,7 @@ async def test_users_display_balance(client: TestClient, token: str, wallet: dic
     # Changes only the settings provided
     default_values = UserPreferences().model_dump()
     assert resp.json()["settings"] == {**default_values, "balance_currency": "BTC"}
-    assert float(await get_wallet_balances(client, token)) == 0.01
+    assert float(await get_wallet_balances(client, token)) == 1.5
     resp = await client.post(
         "/users/me/settings",
         json={"balance_currency": "USD"},
@@ -1383,8 +1397,8 @@ async def test_users_display_balance(client: TestClient, token: str, wallet: dic
 
 async def test_invoice_products_access_control(client: TestClient) -> None:
     user1 = await create_user(client)
-    user2 = await create_user(client)
     token1 = (await create_token(client, user1))["access_token"]
+    user2 = await create_user(client, token=token1)
     token2 = (await create_token(client, user2))["access_token"]
     product1 = await create_product(client, token1)
     product2 = await create_product(client, token2)
